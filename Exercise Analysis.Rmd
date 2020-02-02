@@ -2,7 +2,9 @@
 title: "Exercise Analysis"
 author: "Ilja Muhl"
 date: "29 1 2020"
-output: html_document
+output: 
+  html_document: 
+    keep_md: yes
 ---
 # Executive Summary
 
