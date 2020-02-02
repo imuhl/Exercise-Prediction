@@ -1,0 +1,131 @@
+---
+title: "Exercise Analysis"
+author: "Ilja Muhl"
+date: "29 1 2020"
+output: html_document
+---
+# Executive Summary
+
+This report analyses the data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants collected.
+Several models are trained (decision tree, random forest, gradient boosting machine) to predict the classe variable in the data. For more information about the data see [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har).
+The random forest model has the best prediction accuracy and therefore is used to predict classe value in the testing data.
+
+# Load Data
+```{r, message=FALSE}
+library(caret)
+library(ggplot2)
+trainUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(trainUrl, destfile = "data/pml-training.csv", )
+testUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(testUrl, destfile = "data/pml-testing.csv")
+training <- read.csv("data/pml-training.csv", stringsAsFactors = FALSE)
+testing <- read.csv("data/pml-testing.csv", stringsAsFactors = FALSE)
+```
+
+
+# Distribution of Output
+```{r}
+ggplot(training, aes(classe)) + geom_bar()
+```
+
+# Convert Data to numeric values
+```{r, warning=FALSE}
+# convert to numeric
+training[,-c(1:7,160)] <- lapply(training[,-c(1:7,160)], as.numeric)
+```
+
+# Clean Data
+Remove variables, that contain to much NA values (> 95%).
+```{r}
+# check for NAs
+countNAs <- sort(sapply(training, function(x) sum(is.na(x))/length(x)), decreasing = TRUE)
+# use only columnt with less than 95% NAs
+training <- training[,names(countNAs[countNAs < 0.95])]
+```
+
+# Filter Columns
+Keep only numeric data from movement sensors and the output variable.
+```{r}
+training <- training[,-c(1:7)]
+```
+
+# Cross validation
+Use k-fold cross validation to improve model performance.
+```{r}
+fitControl <- trainControl(method = "cv",
+                           number = 5)
+```
+
+# Model Training
+Train first model based on a decision tree (rpart).
+```{r}
+timeRpart <- system.time({
+    modelRpart <- train(classe ~., data = training, method = "rpart", trControl = fitControl)
+})
+```
+```{r}
+pred <- predict(modelRpart, training)
+confM <- confusionMatrix(data = pred, reference = factor(training$classe))
+confM
+```
+
+The model has a bad accuracy of only `r 100*round(confM$overall[1],2)`% on the training data. It took `r timeRpart[1]`s to calculate the model.
+Compare predicted and true classes.
+```{r}
+ggplot(training, aes(x = classe, fill = pred)) + geom_bar() + labs(x = "True classes", fill = "Predicted classes", title = "Predicted vs. True Classes")
+```
+
+
+Train another model based on random forest (rf).
+```{r, cache=TRUE}
+timeRf <- system.time({
+    modelRf <- train(classe ~., data = training, method = "rf", trControl = fitControl)
+})
+```
+
+```{r}
+pred <- predict(modelRf, training)
+confM <- confusionMatrix(data = pred, reference = factor(training$classe))
+confM
+```
+
+The model has a better accuracy of `r 100*round(confM$overall[1],2)`% on the training data. It took `r timeRf[1]`s to calculate the model.
+Compare predicted and true classes.
+```{r}
+ggplot(training, aes(x = classe, fill = pred)) + geom_bar() + labs(x = "True classes", fill = "Predicted classes", title = "Predicted vs. True Classes")
+```
+
+Train another model based on a gradient boosting machine (gbm).
+```{r, cache=TRUE}
+timeGbm <- system.time({
+    modelGbm <- train(classe ~., data = training, method = "gbm", trControl = fitControl, verbose = FALSE)
+})
+```
+
+```{r}
+pred <- predict(modelGbm, training)
+confM <- confusionMatrix(data = pred, reference = factor(training$classe))
+confM
+```
+
+The model has an accuracy of `r 100*round(confM$overall[1],2)`% on the training data. This is almost as good, as the accuracy of the random forest model. It took `r timeGbm[1]`s to calculate the model.
+Compare predicted and true classes.
+```{r}
+ggplot(training, aes(x = classe, fill = pred)) + geom_bar() + labs(x = "True classes", fill = "Predicted classes", title = "Predicted vs. True Classes")
+```
+
+# Model Decision
+The random forest model had the best accuracy on the training data, so this model will be chosen to calculate the predictions for the test data.
+
+
+
+# Expected Out of Sample Error
+The shown accuracy was calculated on the training data. We expect a worse accuracy on the testing data, because this data was unseen in the training of the model.
+
+# Predict Testing Data
+Predict outcome in testing data with the random forest model
+```{r}
+pred <- predict(modelRf, testing)
+pred
+```
+
